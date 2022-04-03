@@ -104,13 +104,11 @@ az iot hub device-identity list  --hub-name $hubName --query "[?contains(deviceI
 
 ## Create a simulator and send telemetry to the hub
 
-In the next part, you'll use C# to create a simulator and connect to the IoT Hub via the SDK.  If you want to skip creation of the project, [just use the code from the official repo](https://github.com/blgorman/AZ-220-Microsoft-Azure-IoT-Developer/tree/master/Allfiles/Labs/07-Device%20Message%20Routing/Starter/VibrationDevice);
+In the next part, you'll use C# to create a simulator and connect to the IoT Hub via the SDK.  If you just want the original project, [just use the code from the official repo](https://github.com/MicrosoftLearning/AZ-220-Microsoft-Azure-IoT-Developer/tree/master/Allfiles/Labs/07-Device%20Message%20Routing/Starter/VibrationDevice);
+
+The original project is in .Net Core 3.1  The project in this repo is .Net 6.
 
 >**Note**: My project leverages the `appsettings.json` file and ultimately the developer secrets, which is divergent from the sample application found [here](https://github.com/blgorman/AZ-220-Microsoft-Azure-IoT-Developer/tree/master/Allfiles/Labs/07-Device%20Message%20Routing/Starter/VibrationDevice).  If you aren't sure how to set that up but want to build from scratch, review my project for the ConfigurationBuilder and the creation of it in the main Program.
-
-## Create the project
-
-Begin by creating a new console project.  The steps to get started follow. This will guide you to the solution.  
 
 ### Additional NuGet Packages
 
@@ -122,9 +120,7 @@ Note the following NuGet packages exist in the solution:
 
 It is important to note that the device ID will map to a preregistered device.  If the device is not pre-registered and you don't have a connection string to connect to, then you won't be able to connect and simulate the telemetry.
 
-1. Begin by setting up the device simulator to connect.
-
-    Use the following code to create global variables:
+1. Notice the setup to allow the device simulator to connect.
 
     ```c#
     private const int _telemetryIntervalMilliseconds = 2000;
@@ -132,13 +128,15 @@ It is important to note that the device ID will map to a preregistered device.  
     private static string _deviceConnectionString = "";
     ```  
 
-1. Next, add the connection string information to your `appsettings.json` file, or just set it directly in the code.
+2. The connection string information is retrieved from the `appsettings.json` file
 
     ```c#  
     _deviceConnectionString = _configuration["Device:ConnectionString"];
     ```  
 
-    After adding the device connection string, add the code to connect to the IoT hub:
+    Ideally, you should move this to the developer secrets and/or leverage Azure Key Vault.
+
+    After reviewing the device connection string, review the code to connect to the IoT hub:
 
     ```c#
     _deviceClient = DeviceClient.CreateFromConnectionString(
@@ -151,10 +149,122 @@ It is important to note that the device ID will map to a preregistered device.  
 
 ## Create telemetry
 
-The process to create telemetry is to build some sort of data generator that sends data to the hub from the device simulator.  You could extrapolate that into your own needs. For simplicity, I made a class called `SimpleTelemetryData` that has a temperature and a fan status.  A `FanStatus` enumeration, and then a generator to simulate some data.  Again, this code is based on the original code from the AZ-220 materials.
+The process to create telemetry is to build some sort of data generator that sends data to the hub from the device simulator.  You could extrapolate that into your own needs. For simplicity, from the AZ-220 materials we'll leverage the device simulator for a vibration device.
 
-Code for the 
+Code for the simulator is in my repo but again traces back to its roots in the original repository.
 
+Once you get the connection string information set, you can then send telemetry to your hub.
+
+
+## Utilize the Device Provisioning Service to allow devices to automatically connect
+
+In this next part, we'll leverage the simulator making multiple copies, and we'll utilize certificates against the DPS to allow devices to automatically connect.
+
+### Create the DPS at Azure
+
+The first step is to create a Device Provisioning Service (DPS) at Azure.  This DPS will allow devices to automatically register and connect to the IoT Hub.
+
+1. Create the DPS
+
+    ```bash
+    dpsName=my-iot-dps-20221231xyz
+    az iot dps create --name $dpsName -g $rg --sku S1
+    ```  
+
+1. Create the certificates
+
+    ```bash
+    mkdir IntroToIoT
+    cd IntroToIoT
+    mkdir certificates
+    cd certificates
+    curl https://raw.githubusercontent.com/Azure/azure-iot-sdk-c/master/tools/CACertificates/certGen.sh --output certGen.sh
+    curl https://raw.githubusercontent.com/Azure/azure-iot-sdk-c/master/tools/CACertificates/openssl_device_intermediate_ca.cnf --output openssl_device_intermediate_ca.cnf
+    curl https://raw.githubusercontent.com/Azure/azure-iot-sdk-c/master/tools/CACertificates/openssl_root_ca.cnf --output openssl_root_ca.cnf
+    chmod 700 certGen.sh
+    ./certGen.sh create_root_and_intermediate
+    download ~/IntroToIoTDemo/certificates/certs/azure-iot-test-only.root.ca.cert.pem
+    ```  
+
+    Download the file
+
+1. Register the certificates 
+
+    Navigate to your IoT DPS in the portal.  Find the `Certificates` section, and add the cert you just downloaded.  Name it `root-ca-cert` or something very similar that you can remember.  Check `Verify Automatically` and upload/save the root cert.
+
+    You used to have to manually verify this cert, but now you can have Azure do it automatically.  If you choose to verify yourself, you can find instructions [here](https://github.com/MicrosoftLearning/AZ-220-Microsoft-Azure-IoT-Developer/blob/master/Instructions/Labs/LAB_AK_06-automatic-enrollment-of-devices-in-dps.md_)
+
+
+1. Create a group enrollment in the DPS
+
+    Now that you have a root certificate set, you can use that to allow devices to connect through a group enrollment
+
+    Navigate to the `DPS` and find `Manage Enrollments` which is just under the Certificates section.
+
+    Click on `Add Enrollment Group` and create the enrollment group.  Name it `my-iot-eg`
+
+    Choose the following
+
+    - Attestation Type: `Certificiate`
+    - IoT Edge Device: `False`
+    - Primary Cert: `root-ca-cert` or whatever you named your root cert for the DPS
+    - Secondary Cert: `No certificate selected`
+    - Assign Devices: `evenly weighted distribution`
+    - IoT Hub: if not already set, select your IoT hub with owner access, save it, then check the box
+
+    Alternatively, you can do this through the CLI:
+
+    ```bash
+    hubConnectionString=$(az iot hub connection-string show --hub-name $hubName --resource-group $rg --key-type primary --query connectionString -o tsv)
+    az iot dps linked-hub create --dps-name $dpsName --resource-group $rg --connection-string $hubConnectionString
+    ```
+
+    - Select how you want ... re-provisioning: `Re-provision and migrate data`
+    - Initial Device Twin State:
+
+    ```json
+    {
+        "tags": {},
+        "properties": {
+            "desired": {
+                "telemetryDelay": "1"
+            }
+        }
+    }
+    ```  
+
+    - Enable Entry: `Enable`
+
+    Hit Save
+
+    You've now created the enrollment group.
+
+
+1. Create some simulated devices
+
+    Leverage information from [this document](https://docs.microsoft.com/azure/iot-dps/quick-create-simulated-device-x509?tabs=windows&pivots=programming-language-ansi-c).
+
+    Additionally, get the solution code for the certificate simulated device
+
+
+
+1. Connect and run the devices
+
+    Note how they automatically connect and start sending telemetry data.
+
+## Use Stream Analytics to analyze the hot/code path data
+
+In this part, you will analyze data from the hub into a hot path using Stream Analytics
+
+## Push all data to the cold path storage
+
+In this part, you will push data to the cold path storage for analysis later in the game
+
+## Azure IoT Edge
+
+As we're likely out of time here, for this last part, we'll just examine the idea of an edge device.
+
+At the end of the day, you would create a device and enroll as an edge  device.  Once the device is registered, you can deploy packages to the edge device and transfer data processing to the edge device
 
 ### Resources
 

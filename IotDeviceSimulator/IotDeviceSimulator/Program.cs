@@ -21,6 +21,37 @@ namespace IotDeviceSimulator
             BuildOptions();
             Console.WriteLine("Hello World");
 
+            Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates]?");
+
+            int userChoice;
+            var success = int.TryParse(Console.ReadLine(), out userChoice);
+            while (!success || userChoice < 1 || userChoice > 2)
+            {
+                Console.WriteLine("Bad input");
+                Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates]?");
+                success = int.TryParse(Console.ReadLine(), out userChoice);
+            }
+
+            switch (userChoice)
+            {
+                case 1:
+                    UseConnectionStringDeviceClient();
+                    break;
+                case 2:
+                    UseCertificateDeviceClient();
+                    break;
+                default:
+                    UseConnectionStringDeviceClient();
+                    break;
+            }
+
+            Console.WriteLine("Program completed, press enter to end at any time");
+            Console.ReadLine();
+        }
+
+        private static void UseConnectionStringDeviceClient()
+        {
+            Console.WriteLine("Using Connection string to write telemetry to the hub");
             _deviceConnectionString = _configuration["Device:ConnectionString"];
 
             //https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-devguide-protocols
@@ -32,7 +63,12 @@ namespace IotDeviceSimulator
 
             //start the processing
             SendDeviceToCloudMessagesAsync();
-            Console.ReadLine();
+        }
+
+        private static void UseCertificateDeviceClient()
+        {
+            Console.WriteLine("Using certificate attestation via DPS enrollment group to write telemetry to the hub");
+
         }
 
         private static async void SendDeviceToCloudMessagesAsync()
