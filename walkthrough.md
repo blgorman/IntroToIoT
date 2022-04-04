@@ -115,6 +115,12 @@ The original project is in .Net Core 3.1  The project in this repo is .Net 6.
 Note the following NuGet packages exist in the solution:
 
 1. Microsoft.Azure.Devices.Client
+2. Microsoft.Azure.Devices.Provisioning.Client
+3. Microsoft.Azure.Devices.Provisioning.Transport.Amqp
+4. Microsoft.Azure.Devices.Provisioning.Transport.Http
+5. Microsoft.Azure.Devices.Provisioning.Transport.Mqtt
+
+The Client device is the only thing needed to connect with a connection string.  When using certificates and the Azure Device Provisioning Service, the remaining four provisioning packages are required.
 
 ### Wire up the connection for the device to the hub
 
@@ -171,7 +177,7 @@ The first step is to create a Device Provisioning Service (DPS) at Azure.  This 
     az iot dps create --name $dpsName -g $rg --sku S1
     ```  
 
-1. Create the certificates
+1. Create the root certificate
 
     ```bash
     mkdir IntroToIoT
@@ -188,7 +194,7 @@ The first step is to create a Device Provisioning Service (DPS) at Azure.  This 
 
     Download the file
 
-1. Register the certificates 
+1. Register the root certificate
 
     Navigate to your IoT DPS in the portal.  Find the `Certificates` section, and add the cert you just downloaded.  Name it `root-ca-cert` or something very similar that you can remember.  Check `Verify Automatically` and upload/save the root cert.
 
@@ -239,18 +245,74 @@ The first step is to create a Device Provisioning Service (DPS) at Azure.  This 
 
     You've now created the enrollment group.
 
+1. Create three simulator device certificates.
+
+    These certificates will be used to allow the devices to auto-register to connect to your IoT Hub
+
+    To complete this, you will need three device certs for devices named 
+
+    `vibration-sensor-2500`
+    `vibration-sensor-2600`
+    `vibration-sensor-2700`
+
+    >**NOTE:** As you create certificates, the generated cert will be named `new-device.cert.pfx` and will have a matching file `new-device.cert.pem`.  You will want to rename these files each time you are going to generate new device certificates to avoid overwriting the certificates.
+
+    Repeat the following operations for each of the three devices, replacing `[cert-name]` with the individual device name
+
+    ```bash
+    ./certGen.sh create_device_certificate [cert-name]
+
+    mv ~/introToIoT/certificates/certs/new-device.cert.pfx ~/introToIoTcertificates/certs/[cert-name]-device.cert.pfx
+    mv ~/introToIoT/certificates/certs/new-device.cert.pem ~/introToIoT/certificates/certs/[cert-name]-device.cert.pem
+    ```  
+
+    i. e.
+    ```bash  
+    ./certGen.sh create_device_certificate vibration-sensor-2500
+
+    mv ~/introToIoT/certificates/certs/new-device.cert.pfx ~/introToIoT/certificates/certs/vibration-sensor-2500-device.cert.pfx
+    mv ~/introToIoT/certificates/certs/new-device.cert.pem ~/introToIoT/certificates/certs/vibration-sensor-2500-device.cert.pem
+    ```
+    
+    Download the *.pfx files and replace the existing certificates in your project directory to map to your DPS.  Failure to do this will mean you will be trying to use invalid certificates.
+
+    ```bash
+    download vibration-sensor-2500-device.cert.pfx
+    download vibration-sensor-2600-device.cert.pfx
+    download vibration-sensor-2700-device.cert.pfx
+    ```  
 
 1. Create some simulated devices
 
     Leverage information from [this document](https://docs.microsoft.com/azure/iot-dps/quick-create-simulated-device-x509?tabs=windows&pivots=programming-language-ansi-c).
 
-    Additionally, get the solution code for the certificate simulated device
+    Additionally, the simulator in this repo has the ability to use certificates baked in.  You will just need to configure a few things.
 
+    Each device will need to be configured to use the correct DPS Id Scope and the generated certificates.
 
+    Find the ID Scope for your `DPS` from the overview in the portal.  It should be similar to `0ne00576D06`, and is located under the service and global device endpoints and above the pricing and scale tier.   Alternatively, you can get the information with the following command:
+
+    ```bash
+    az iot dps show --name $dpsName --query properties.idScope -o tsv
+    ```
+
+    >**NOTE:** Do not forget to update the `DPSIdScope` value in the `appsettings.json` file with the value of your DPSIdScope.
 
 1. Connect and run the devices
 
-    Note how they automatically connect and start sending telemetry data.
+    Make three copies of the project directory and use terminals to start each of the three, making sure to leverage the correct certificate file by choosing the device to simulate.
+
+    Alternatively, just start three instances with Debug -> Start new instance
+
+1. Change the telemetry delay on the DPS devices
+
+    Using the device twin, go to the device and change delay to 5.  This will modify the frequency in which telemetry is sent to the hub.
+
+Final thoughts here
+
+- Having the enrollment group means you can deactivate enrollment for all of the devices
+- De-enrolling a device does NOT deregister from the hub, but it will prevent re-registering.  If a device is registered on the hub, you must also deregister it from the hub to ensure it cannot send messages.
+- You can see what devices have been registered in the Enrollment group details Registration Records
 
 ## Use Stream Analytics to analyze the hot/code path data
 

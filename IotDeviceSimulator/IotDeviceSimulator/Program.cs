@@ -1,6 +1,10 @@
 ﻿using Microsoft.Azure.Devices.Client;
+using Microsoft.Azure.Devices.Provisioning.Client;
+using Microsoft.Azure.Devices.Provisioning.Client.Transport;
+using Microsoft.Azure.Devices.Shared;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
 namespace IotDeviceSimulator
@@ -12,9 +16,15 @@ namespace IotDeviceSimulator
     {
         private static IConfigurationRoot _configuration;
         
-        private const int _telemetryIntervalMilliseconds = 2000;
+        private static int _telemetryIntervalMilliseconds = 2000;
         private static DeviceClient _deviceClient;
         private static string _deviceConnectionString = "";
+        private static string _dpsIdScope = "";
+        private static string _certificateFileName = "";
+        private static string _certificatePassword = "";
+        private static int _telemetryDelay = 1;
+        //NOTE: This is always the endpoint for devices in Azure IoT with DPS provisioning
+        private const string GlobalDeviceEndpoint = "global.azure-devices-provisioning.net";
 
         public static async Task Main(string[] args)
         {
@@ -38,7 +48,7 @@ namespace IotDeviceSimulator
                     UseConnectionStringDeviceClient();
                     break;
                 case 2:
-                    UseCertificateDeviceClient();
+                    await UseCertificateDeviceClient();
                     break;
                 default:
                     UseConnectionStringDeviceClient();
@@ -65,13 +75,152 @@ namespace IotDeviceSimulator
             SendDeviceToCloudMessagesAsync();
         }
 
-        private static void UseCertificateDeviceClient()
+        
+
+        private static async Task UseCertificateDeviceClient()
         {
             Console.WriteLine("Using certificate attestation via DPS enrollment group to write telemetry to the hub");
+            
+            //cert requires the cert file generated at Azure and the DPSIdScope on which the cert is registered
+            _dpsIdScope = _configuration["Device:DPSIdScope"];
+            var certificateFileName2500 = _configuration["Device:CertificateFileName2500"];
+            var certificateFileName2600 = _configuration["Device:CertificateFileName2600"];
+            var certificateFileName2700 = _configuration["Device:CertificateFileName2700"];
+            _certificatePassword = _configuration["Device:CertificatePassword"];
+            _certificateFileName = certificateFileName2500;
 
+            //get the device to simulate
+            Console.WriteLine("Which device are you simulating [1 -> 2500, 2 -> 2600, 3 -> 2700]?");
+            int userChoice;
+            var success = int.TryParse(Console.ReadLine(), out userChoice);
+            while (!success || userChoice < 1 || userChoice > 3)
+            {
+                Console.WriteLine("Bad input");
+                Console.WriteLine("Which device are you simulating [1 -> 2500, 2 -> 2600, 3 -> 2700]?");
+                success = int.TryParse(Console.ReadLine(), out userChoice);
+            }
+            switch (userChoice)
+            {
+                case 1:
+                    _certificateFileName = certificateFileName2500;
+                    break;
+                case 2:
+                    _certificateFileName = certificateFileName2600;
+                    break;
+                case 3:
+                    _certificateFileName = certificateFileName2700;
+                    break;
+                default:
+                    _certificateFileName = certificateFileName2500;
+                    break;
+            }
+
+            X509Certificate2 certificate = LoadProvisioningCertificate();
+            using (var security = new SecurityProviderX509Certificate(certificate))
+            {
+                using (var transport = new ProvisioningTransportHandlerAmqp(TransportFallbackType.TcpOnly))
+                {
+                    ProvisioningDeviceClient provClient =
+                        ProvisioningDeviceClient.Create(GlobalDeviceEndpoint, _dpsIdScope, security, transport);
+
+                    using (_deviceClient = await ProvisionDevice(provClient, security))
+                    {
+                        await _deviceClient.OpenAsync().ConfigureAwait(false);
+
+                        // Setup device twin callbacks
+                        await _deviceClient
+                            .SetDesiredPropertyUpdateCallbackAsync(OnDesiredPropertyChanged, null)
+                            .ConfigureAwait(false);
+
+                        var twin = await _deviceClient.GetTwinAsync().ConfigureAwait(false);
+                        await OnDesiredPropertyChanged(twin.Properties.Desired, null);
+
+                        // Start reading and sending device telemetry
+                        Console.WriteLine("Start reading and sending device telemetry...");
+                        await SendDeviceToCloudMessagesAsync();
+
+                        await _deviceClient.CloseAsync().ConfigureAwait(false);
+                    }
+                }
+            }
         }
 
-        private static async void SendDeviceToCloudMessagesAsync()
+        private static X509Certificate2 LoadProvisioningCertificate()
+        {
+            var certificateCollection = new X509Certificate2Collection();
+            certificateCollection.Import(_certificateFileName,
+                                         _certificatePassword,
+                                         X509KeyStorageFlags.UserKeySet);
+            X509Certificate2 certificate = null;
+            foreach (X509Certificate2 element in certificateCollection)
+            {
+                Console.WriteLine($"Found certificate: {element?.Thumbprint} {element?.Subject}; PrivateKey: {element?.HasPrivateKey}");
+                if (certificate == null && element.HasPrivateKey)
+                {
+                    certificate = element;
+                }
+                else
+                {
+                    element.Dispose();
+                }
+            }
+
+            if (certificate == null)
+            {
+                throw new FileNotFoundException($"{_certificateFileName} did not contain any certificate with a private key.");
+            }
+
+            Console.WriteLine($"Using certificate {certificate.Thumbprint} {certificate.Subject}");
+            return certificate;
+        }
+
+        private static async Task<DeviceClient> ProvisionDevice(
+            ProvisioningDeviceClient provisioningDeviceClient,
+            SecurityProviderX509Certificate security)
+        {
+            var result = await provisioningDeviceClient
+                .RegisterAsync()
+                .ConfigureAwait(false);
+            Console.WriteLine($"ProvisioningClient AssignedHub: {result.AssignedHub}; DeviceID: {result.DeviceId}");
+            if (result.Status != ProvisioningRegistrationStatusType.Assigned)
+            {
+                throw new Exception($"DeviceRegistrationResult.Status is NOT 'Assigned'");
+            }
+
+            var auth = new DeviceAuthenticationWithX509Certificate(
+                result.DeviceId,
+                security.GetAuthenticationCertificate());
+
+            return DeviceClient.Create(result.AssignedHub, auth, TransportType.Amqp);
+        }
+
+        private static async Task OnDesiredPropertyChanged(TwinCollection desiredProperties, object userContext)
+        {
+            Console.WriteLine("Desired Twin Property Changed:");
+            Console.WriteLine($"{desiredProperties.ToJson()}");
+
+            // Read the desired Twin Properties
+            if (desiredProperties.Contains("telemetryDelay"))
+            {
+                string desiredTelemetryDelay = desiredProperties["telemetryDelay"];
+                if (desiredTelemetryDelay != null)
+                {
+                    _telemetryDelay = int.Parse(desiredTelemetryDelay);
+                    _telemetryIntervalMilliseconds = _telemetryDelay * 1000;
+                }
+                // if desired telemetryDelay is null or unspecified, don't change it
+            }
+
+
+            // Report Twin Properties
+            var reportedProperties = new TwinCollection();
+            reportedProperties["telemetryDelay"] = _telemetryDelay.ToString();
+            await _deviceClient.UpdateReportedPropertiesAsync(reportedProperties).ConfigureAwait(false);
+            Console.WriteLine("Reported Twin Properties:");
+            Console.WriteLine($"{reportedProperties.ToJson()}");
+        }
+
+        private static async Task SendDeviceToCloudMessagesAsync()
         {
             // The ConveyorBeltSimulator class is used to create a
             // ConveyorBeltSimulator instance named `conveyor`. The `conveyor`
