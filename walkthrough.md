@@ -314,13 +314,81 @@ Final thoughts here
 - De-enrolling a device does NOT deregister from the hub, but it will prevent re-registering.  If a device is registered on the hub, you must also deregister it from the hub to ensure it cannot send messages.
 - You can see what devices have been registered in the Enrollment group details Registration Records
 
-## Use Stream Analytics to analyze the hot/code path data
-
-In this part, you will analyze data from the hub into a hot path using Stream Analytics
-
 ## Push all data to the cold path storage
 
-In this part, you will push data to the cold path storage for analysis later in the game
+In this part, you will push data to the cold path storage.
+
+1. Begin by creating an Azure Storage account to store the data.
+
+    Use the following code in the azure cloud shell or from your local terminal of choice to create a new storage account and container. 
+
+    >**Note:** The code below relies on variables set from above.  If you've stepped away and restarted the terminal or it has timed out, you will need to refresh the variables.  For that reason, they are reset in this code. If you don't need these variables, don't use them.  If you need to modify them to match something you did earlier, make sure to do so.
+
+    ```bash
+    rg=az-iot-demo-rg
+    loc=centralus
+    saName=iotdemostor20221231xyz
+    containerName=iot-cold-path-data
+    accessLevel=blob
+
+    az storage account create --name $saName --resource-group $rg --kind BlobStorage --sku Standard_LRS --access-tier Hot --location $loc
+
+    az storage container create --name $containerName --account-name $saName --public-access $accessLevel
+    ```  
+
+    You can alter some of these things, like not exposing to the public for instance.
+
+    >**Note**: You can create account and container information while building the route for the cold storage from your IoT hub in the portal, however it is much cleaner to just select pre-built storage account information
+
+1. Use the portal to build a new route for your cold-path data.
+
+    You could likely do this through commands but it will be easier to configure the route for cold path data in the portal.
+
+    >**Note:** For this to work, you must have completed steps above to get telemetry mapped to the IoT Hub from a simulator. Furthermore, you must have code that is adding properties to the messages as follows (this exists in the sample code from this repo as well as in the original code):
+
+    ```c#
+    ...
+    telemetryMessage.Properties.Add("sensorID", "VSTel");
+    ...
+    loggingMessage.Properties.Add("sensorID", "VSLog");
+    ...
+    ```  
+
+    Navigate to your IoT hub and open the blade for `Message Routing`
+
+    Add a new route as follows:
+
+    Name: `telemetryLoggingRoute`
+    Endpoint: `Storage`  -> Use the `+ Add Endpoint` and select Storage to configure
+        Endpoint Name: `telemetryLogEndpoint`
+        Pick a Container: [Select the container created above from the appropriate account]
+        Leave all the rest of the settings as-is.  If you want, you could log as JSON, but the default has been `AVRO`.  Certain Big Data Solutions may require `AVRO` format.
+
+        Hit `Create` and allow the route to create the connection to the storage endpoint
+
+    You are now back on the original page
+
+    Data Source: `Device Telemetry Messages`
+    Enable Route: `Enabled`
+    Routing Query: `sensorID = 'VSLog'
+
+    Save the changes
+
+1. Ensure the cold path storage is working.
+
+    Restart one or more of the simulators.  They should log all telemetry to the cold storage.  After a couple of minutes, navigate to the storage container and ensure you are getting data logged in the format you chose under the folder structure for the route you just created.
+
+    Be patient, sometimes it takes 5 minutes to start showing up.  You may need to stop the simulators after a few minutes to get the first writes to show up.
+
+## Use Stream Analytics to analyze the hot/code path data
+
+In this part, you will analyze data from the hub into a hot path using Stream Analytics.  All data is currently going to the cold path, however you will want to be reporting data to users immediately if it is out of range.  This is where stream analytics will give you the results you are looking for.
+
+1. Create a new Stream Analytics Job
+
+    Use the portal to create a new Stream Analytics job
+
+
 
 ## Azure IoT Edge
 
