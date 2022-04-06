@@ -504,10 +504,21 @@ For this demo, you'll import from the hub, select the target 'critical' data, an
 
 ## Azure IoT Edge
 
-As we're likely out of time here, for this last part, we'll just examine the idea of an edge device.
+As we're likely out of time here, for this last part, I'll talk through the edge deployment.
 
-At the end of the day, you would create a device and enroll as an edge  device.  Once the device is registered, you can deploy packages to the edge device and transfer data processing to the edge device
+At the end of the day, you would create a device and enroll as an edge device.  Once the device is registered, you can deploy packages to the edge device and transfer data processing to the edge device.
+
+For example, you might have an edge device that runs stream analytics on the edge and thereby only sends part of the telemetry from the edge device(s) to the hub.
+
+
+1. Create the Linux VM to serve as the IoT Edge Device
+   
+   https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FMicrosoftLearning%2FAZ-220-Microsoft-Azure-IoT-Developer%2Fmaster%2FAllfiles%2FARM%2Flab12a.json
 
 ### Resources
 
 - [Raspberry PI Simulator](https://azure-samples.github.io/raspberry-pi-web-simulator/)
+- [Microsoft AZ-220 Labs](https://github.com/MicrosoftLearning/AZ-220-Microsoft-Azure-IoT-Developer)
+- [Linux VM Edge GateWay Device](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FMicrosoftLearning%2FAZ-220-Microsoft-Azure-IoT-Developer%2Fmaster%2FAllfiles%2FARM%2Flab12a.json)  
+- [Industry Specific Azure IoT reference Architectures](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/iot/industry-iot-hub-page)
+- [Azure Marketplace for IoT Edge](https://azuremarketplace.microsoft.com/en-us/marketplace/apps/category/internet-of-things?page=1&subcategories=iot-edge-modules)
