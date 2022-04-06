@@ -382,13 +382,125 @@ In this part, you will push data to the cold path storage.
 
 ## Use Stream Analytics to analyze the hot/code path data
 
-In this part, you will analyze data from the hub into a hot path using Stream Analytics.  All data is currently going to the cold path, however you will want to be reporting data to users immediately if it is out of range.  This is where stream analytics will give you the results you are looking for.
+In this part, you will analyze data from the hub into a hot path using Stream Analytics.  All data is currently going to the cold path, however you will want to be reporting data to users immediately if it is out of range.  This is where stream analytics will give you the results you are looking for.  
+
+In order for the Stream Analytics to work, you will need a Stream Analytics job with an input and an output and a query to select data from the input.
+
+For this demo, you'll import from the hub, select the target 'critical' data, and push that into storage.  In the real world you might push the data into Power BI or another intelligence dashboard.
 
 1. Create a new Stream Analytics Job
 
-    Use the portal to create a new Stream Analytics job
+    Use the portal to create a new Stream Analytics job.
 
+    For the Job, set the following parameters:
 
+    Job Name: `IoTTelemetryHotPath`  
+    Subscription: `<your-sub>`  
+    Resource Group: `<your-rg>`  
+    Location: `<your-location>`  
+    Hosting Environment: `Cloud`  
+    Streaming Units: `1`  
+    Secure all private data ...: `unchecked`  
+
+    Click `Create`  
+
+1. Create an input source.
+
+    For this step, you need to set the input.  Navigate to the job in the portal, and then select the `Inputs` under `Job Topology`. Click `Add Stream input` and select `IoT Hub` from the dropdown.
+
+    Enter the information in the pane on the right side:  
+
+    Input Alias: `iotTelemetryInput`  
+    Select IoT Hub from your subscriptions: `selected`  
+    Subscription: `<your-sub>`  
+    IoT Hub: `<select your hub>`  
+    Consumer Group: `$Default`  
+    Shared access policy name: `iothubowner`  
+    Shared access policy key: ... this is autofilled  
+    Endpoint: `Messaging`  
+    Partition Key: Leave blank  
+    Event Serialization Format: `JSON`  
+    Encoding: `UTF-8`  
+    Event Compression: `None`  
+
+1. Create the storage account to save output data
+
+    For this step, you'll create the output.  For demo purposes, output is just going to go to storage.
+
+    To make this work, first create a new DataLake Storage account and container using the portal
+
+    Navigate to storage accounts and select `Create`.
+
+    Select your subscription and resource group.  Create new if necessary, but you should have a resource group for this activity you could just use, unless you want to keep this separate for some reason. 
+
+    Set the following properties:
+
+    Storage Account Name: `iotdlakestor20221231xyz`
+    Region: `<your-region>`
+    Performance: `standard`
+    Redundancy: `LRS`
+
+    Select `Advanced`.  
+
+    Check the box for `Enable Hierarchical Namespace` to make this a data lake storage account.
+
+    Select `Outputs` under the `Job topology`.  In the dropdown, select `Blob Storage/ADLS Gen2`  
+
+    Select `Review And Create`, then validate, then `Create` when the validation has passed.  Optionally, you could configure other settings on the storage account first if you wanted, such as data retention and soft-delete policies.
+
+    Once the account is created, make a new container.
+
+    Name the container: `iot-hot-path-data`
+    Public Access Level: `Blob (anonymous read access for blobs only)`  
+
+    Click Create.
+
+1. Create the output 
+
+    Navigate back to the stream analytics job in the portal, and then select the `Outputs` under `Job Topology`. Click `Add Stream input` and select `IoT Hub` from the dropdown.
+
+    Enter the information in the pane on the right side:  
+
+    Set the following properties on the right pane:  
+
+    Output Alias: `iotTelemetryOutput`
+    Select Blob storage/ADLS Gen2 from your subscriptions: `Selected`
+    Storage account: `select the data lake storage and container you created above`
+    Authentication Mode: `Connection String`
+
+    Leave the rest of the settings as-is.
+
+    Save the output path.
+
+1. Create the query.
+
+    For the next part, you will create the query to select data for porting to the hot path.
+
+    This is where the power of the Stream Analytics will come into play, as the job will be able to filter all of the telemetry and only push the critical path data to the hot path.
+
+    Navigate to the Job topology `Query` section, and use the following query:
+
+    ```sql
+    SELECT
+        *
+    INTO
+        iotTelemetryOutput
+    FROM
+        iotTelemetryInput
+    WHERE vibration > 1.5 or vibration < -1.5
+    ```  
+
+1. Run the simulators and see the query working
+
+    Start a couple of simulators to send data to the IoTHub if not already running.
+
+    Navigate to the stream analytics job in the portal and start the job.
+
+    Use the `Test Query` to view results
+
+1. Navigate to the Storage account and review the output data files
+
+    Provided some data was filtered, you should be able to navigate to storage and see the output data.
 
 ## Azure IoT Edge
 
