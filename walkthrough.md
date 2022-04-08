@@ -36,7 +36,7 @@ Partition count is a required parameter when creating a free hub. The standard h
 Query to see the hub:
 
 ```bash
-az iot hub list --query "[?contains(name, '${hubName}')]" -o tsv
+az iot hub list --query "[?contains(name, '${hubName}')]" -o table
 ```  
 
 ### Examining the hub
@@ -97,7 +97,7 @@ az iot hub device-identity create --hub-name $hubName --device-id $deviceId
 Query to see the device:
 
 ```bash
-az iot hub device-identity list  --hub-name $hubName --query "[?contains(deviceId, '${deviceId}')]" -o tsv
+az iot hub device-identity list  --hub-name $hubName --query "[?contains(deviceId, '${deviceId}')]" -o table
 ```  
 
 >**Note**: Adding a device registration is a necessary first step to get telemetry from a device, however the device must also connect to the hub.  Therefore, remember that registration != connection.  Also note that once a device is registered, if you need to prevent the device from connecting you must ensure that the device is no longer registered.
@@ -502,18 +502,6 @@ For this demo, you'll import from the hub, select the target 'critical' data, an
 
     Provided some data was filtered, you should be able to navigate to storage and see the output data.
 
-## Azure IoT Edge
-
-As we're likely out of time here, for this last part, I'll talk through the edge deployment.
-
-At the end of the day, you would create a device and enroll as an edge device.  Once the device is registered, you can deploy packages to the edge device and transfer data processing to the edge device.
-
-For example, you might have an edge device that runs stream analytics on the edge and thereby only sends part of the telemetry from the edge device(s) to the hub.
-
-
-1. Create the Linux VM to serve as the IoT Edge Device
-   
-   https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FMicrosoftLearning%2FAZ-220-Microsoft-Azure-IoT-Developer%2Fmaster%2FAllfiles%2FARM%2Flab12a.json
 
 ### Resources
 
