@@ -6,6 +6,11 @@ using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System;
+using System.Device.I2c;
+using System.Threading;
+using Iot.Device.Bmxx80;
+using Iot.Device.Bmxx80.PowerMode;
 
 namespace IotDeviceSimulator
 {
@@ -31,14 +36,14 @@ namespace IotDeviceSimulator
             BuildOptions();
             Console.WriteLine("Hello World");
 
-            Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates]?");
+            Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor]?");
 
             int userChoice;
             var success = int.TryParse(Console.ReadLine(), out userChoice);
-            while (!success || userChoice < 1 || userChoice > 2)
+            while (!success || userChoice < 1 || userChoice > 3)
             {
                 Console.WriteLine("Bad input");
-                Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates]?");
+                Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor]?");
                 success = int.TryParse(Console.ReadLine(), out userChoice);
             }
 
@@ -49,6 +54,9 @@ namespace IotDeviceSimulator
                     break;
                 case 2:
                     await UseCertificateDeviceClient();
+                    break;
+		case 3:
+                    await UseEnviroBoardOnPi();
                     break;
                 default:
                     UseConnectionStringDeviceClient();
@@ -75,7 +83,54 @@ namespace IotDeviceSimulator
             SendDeviceToCloudMessagesAsync();
         }
 
-        
+        private static async Task UseEnviroBoardOnPi()
+        {
+            _deviceConnectionString = _configuration["Device:ConnectionString"];
+
+            _deviceClient = DeviceClient.CreateFromConnectionString(
+                    _deviceConnectionString,
+                    TransportType.Mqtt);
+
+            var i2cSettings = new I2cConnectionSettings(1, Bme280.SecondaryI2cAddress);
+            using I2cDevice i2cDevice = I2cDevice.Create(i2cSettings);
+            using var bme280 = new Bme280(i2cDevice);
+
+            int measurementTime = bme280.GetMeasurementDuration();
+
+            var endReadingsAtTime = DateTime.Now.AddSeconds(30);
+
+            while(DateTime.Now < endReadingsAtTime)
+            {
+                Console.Clear();
+
+                bme280.SetPowerMode(Bmx280PowerMode.Forced);
+                Thread.Sleep(measurementTime);
+
+                bme280.TryReadTemperature(out var tempValue);
+                bme280.TryReadPressure(out var preValue);
+                bme280.TryReadHumidity(out var humValue);
+                bme280.TryReadAltitude(out var altValue);
+
+                var temp = $"{tempValue.DegreesCelsius:0.#}\u00B0C";
+                var humidity = $"{humValue.Percent:#.##}%";
+                var pressure = $"{preValue.Hectopascals:#.##} hPa";
+                var altitude = $"{altValue.Meters:#} m";
+
+                Console.WriteLine($"Temperature: {temp}");
+                Console.WriteLine($"Pressure: {pressure}");
+                Console.WriteLine($"Relative humidity: {humidity}");
+                Console.WriteLine($"Estimated altitude: {altitude}");
+
+                var telemetryMessage = new BME280(temp, pressure, humidity, altitude).ToJson();
+                var msg = new Message(Encoding.ASCII.GetBytes(telemetryMessage));
+                //msg.properties.Add("DeviceId", "enviro1000");
+                //msg.properties.Add("TempAlert", tempValue.DegreesCelsius > 25);
+                await _deviceClient.SendEventAsync(msg);
+                ConsoleHelper.WriteGreenMessage($"Telemetry sent {DateTime.Now.ToShortTimeString()}");
+                Thread.Sleep(1000);
+
+            }
+        }
 
         private static async Task UseCertificateDeviceClient()
         {
