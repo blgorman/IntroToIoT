@@ -14,6 +14,7 @@ namespace IotDeviceSimulator
             Console.WriteLine(text);
             Console.ResetColor();
         }
+        
         public static void WriteGreenMessage(string text)
         {
             WriteColorMessage(text, ConsoleColor.Green);

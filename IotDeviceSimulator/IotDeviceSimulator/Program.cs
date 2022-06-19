@@ -11,6 +11,7 @@ using System.Device.I2c;
 using System.Threading;
 using Iot.Device.Bmxx80;
 using Iot.Device.Bmxx80.PowerMode;
+using System.Diagnostics;
 
 namespace IotDeviceSimulator
 {
@@ -28,6 +29,8 @@ namespace IotDeviceSimulator
         private static string _certificateFileName = "";
         private static string _certificatePassword = "";
         private static int _telemetryDelay = 1;
+        private static int _telemetryReadForSeconds = 30;
+
         //NOTE: This is always the endpoint for devices in Azure IoT with DPS provisioning
         private const string GlobalDeviceEndpoint = "global.azure-devices-provisioning.net";
 
@@ -85,24 +88,28 @@ namespace IotDeviceSimulator
 
         private static async Task UseEnviroBoardOnPi()
         {
+            Console.WriteLine("Would you like to show each telemetry reading [y/n]?");
+            var shouldShowIndivudualTelemetry = Console.ReadLine()?.StartsWith("y", StringComparison.OrdinalIgnoreCase) ?? false;
+        
             _deviceConnectionString = _configuration["Device:ConnectionString"];
 
             _deviceClient = DeviceClient.CreateFromConnectionString(
                     _deviceConnectionString,
                     TransportType.Mqtt);
 
+            var endReadingsAtTime = DateTime.Now.AddSeconds(_telemetryReadForSeconds);
+
             var i2cSettings = new I2cConnectionSettings(1, Bme280.SecondaryI2cAddress);
             using I2cDevice i2cDevice = I2cDevice.Create(i2cSettings);
             using var bme280 = new Bme280(i2cDevice);
 
             int measurementTime = bme280.GetMeasurementDuration();
-
-            var endReadingsAtTime = DateTime.Now.AddSeconds(30);
+            var command = "python";
+            var script = @"/home/pi/enviro/enviroplus-python/examples/singlelight.py"; //note: make sure path is valid
+            var args = $"{script}"; 
 
             while(DateTime.Now < endReadingsAtTime)
             {
-                Console.Clear();
-
                 bme280.SetPowerMode(Bmx280PowerMode.Forced);
                 Thread.Sleep(measurementTime);
 
@@ -116,20 +123,52 @@ namespace IotDeviceSimulator
                 var pressure = $"{preValue.Hectopascals:#.##} hPa";
                 var altitude = $"{altValue.Meters:#} m";
 
-                Console.WriteLine($"Temperature: {temp}");
-                Console.WriteLine($"Pressure: {pressure}");
-                Console.WriteLine($"Relative humidity: {humidity}");
-                Console.WriteLine($"Estimated altitude: {altitude}");
+                string lightProx = string.Empty;
 
-                var telemetryMessage = new BME280(temp, pressure, humidity, altitude).ToJson();
+                using (Process process = new Process())
+                {
+
+                    process.StartInfo.UseShellExecute = false;
+                    process.StartInfo.FileName = command;
+                    process.StartInfo.Arguments = args;
+                    process.StartInfo.RedirectStandardOutput = true;
+                    process.StartInfo.CreateNoWindow = true;
+                    process.Start();
+
+                    StreamReader sr = process.StandardOutput;
+                    lightProx = sr.ReadToEnd();
+                    process.WaitForExit();
+                }
+
+                var result = lightProx.Split('\'');
+                var lux = result[3];
+                var prox = result[7];
+
+                if(shouldShowIndivudualTelemetry)
+                {
+                    Console.WriteLine($"Temperature: {temp}");
+                    Console.WriteLine($"Pressure: {pressure}");
+                    Console.WriteLine($"Relative humidity: {humidity}");
+                    Console.WriteLine($"Estimated altitude: {altitude}");
+                    Console.WriteLine($"Light: {lux} lux");
+                    Console.WriteLine($"Proximity: {prox}");
+                }
+
+                var telemetryObject = new BME280PlusLTR559(temp, pressure, humidity, altitude, lux, prox);
+                var telemetryMessage = telemetryObject.ToJson();
                 var msg = new Message(Encoding.ASCII.GetBytes(telemetryMessage));
                 //msg.properties.Add("DeviceId", "enviro1000");
                 //msg.properties.Add("TempAlert", tempValue.DegreesCelsius > 25);
                 await _deviceClient.SendEventAsync(msg);
                 ConsoleHelper.WriteGreenMessage($"Telemetry sent {DateTime.Now.ToShortTimeString()}");
-                Thread.Sleep(1000);
 
+                Thread.Sleep(500);
             }
+
+            
+
+            Console.WriteLine("All telemetry read");
+            
         }
 
         private static async Task UseCertificateDeviceClient()

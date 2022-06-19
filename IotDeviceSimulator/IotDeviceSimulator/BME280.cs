@@ -2,9 +2,6 @@ using Newtonsoft.Json;
 
 namespace IotDeviceSimulator
 {
-    //Note: the code in this simulator is based on the code found here:
-    //https://github.com/MicrosoftLearning/AZ-220-Microsoft-Azure-IoT-Developer/tree/master/Allfiles/Labs/07-Device%20Message%20Routing/Starter/VibrationDevice
-
     public class BME280
     {
         public string TemperatureCelsius {get;set;}
@@ -22,7 +19,7 @@ namespace IotDeviceSimulator
             EstimatedAltitudeMeters = altitude;
         }
 
-        public string ToJson()
+        public virtual string ToJson()
         {
             return JsonConvert.SerializeObject(this);
         }
