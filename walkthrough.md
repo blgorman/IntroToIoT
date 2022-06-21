@@ -49,7 +49,7 @@ Note that the registration of devices for each will be similar, but there is a f
 
 ### Resources
 
-- [Creaete an IoT hub using the Azure CLI](https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-create-using-cli)
+- [Create an IoT hub using the Azure CLI](https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-create-using-cli)
 
 ## Connecting Devices to the Hub
 
@@ -510,3 +510,10 @@ For this demo, you'll import from the hub, select the target 'critical' data, an
 - [Linux VM Edge GateWay Device](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FMicrosoftLearning%2FAZ-220-Microsoft-Azure-IoT-Developer%2Fmaster%2FAllfiles%2FARM%2Flab12a.json)  
 - [Industry Specific Azure IoT reference Architectures](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/iot/industry-iot-hub-page)
 - [Azure Marketplace for IoT Edge](https://azuremarketplace.microsoft.com/en-us/marketplace/apps/category/internet-of-things?page=1&subcategories=iot-edge-modules)
+- [Pimoroni Getting Started with Enviro+](https://learn.pimoroni.com/article/getting-started-with-enviro-plus)
+- [Digikey PIM 486](https://www.digikey.com/en/products/detail/pimoroni-ltd/PIM486/11205841) 
+- [Digikey PIM 458](https://www.digikey.com/en/products/detail/pimoroni-ltd/PIM458/10289741) - optional upgrade for PMS5003
+- [UCTRONICS Male to Female GPIO Ribbon Cable](https://www.amazon.com/dp/B07D991KMR?psc=1&ref=ppx_yo2ov_dt_b_product_details)  
+- [PMS5003 Digital output Air Quality Monitoring Dust Haze Tester](https://www.amazon.com/dp/B07S3735CY?psc=1&ref=ppx_yo2ov_dt_b_product_details)  
+- [One of many options for Pi](https://www.amazon.com/Raspberry-Model-2019-Quad-Bluetooth/dp/B07TD42S27/?_encoding=UTF8&pd_rd_w=B7Mk7&content-id=amzn1.sym.bbb6bbd8-d236-47cb-b42f-734cb0cacc1f&pf_rd_p=bbb6bbd8-d236-47cb-b42f-734cb0cacc1f&pf_rd_r=JCZ83YP1PV51SFW3VE8F&pd_rd_wg=Y4Sh6&pd_rd_r=1c78c805-ba73-4694-8ba1-41e391a711a3&ref_=pd_gw_ci_mcx_mi)  
+- [Freenove ulitmate starter kit](https://www.amazon.com/dp/B06W54L7B5?psc=1&ref=ppx_yo2ov_dt_b_product_details)  
