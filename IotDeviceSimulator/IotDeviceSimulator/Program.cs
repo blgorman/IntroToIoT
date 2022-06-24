@@ -17,6 +17,8 @@ using Microsoft.Extensions.Logging;
 using MMALSharp;
 using MMALSharp.Handlers;
 using MMALSharp.Common;
+using MMALSharp.Ports;
+using MMALSharp.Components;
 
 namespace IotDeviceSimulator
 {
@@ -35,6 +37,7 @@ namespace IotDeviceSimulator
         private static string _certificatePassword = "";
         private static int _telemetryDelay = 1;
         private static int _telemetryReadForSeconds = 30;
+        private static MMALCamera _cam;
 
         //NOTE: This is always the endpoint for devices in Azure IoT with DPS provisioning
         private const string GlobalDeviceEndpoint = "global.azure-devices-provisioning.net";
@@ -42,6 +45,14 @@ namespace IotDeviceSimulator
         public static async Task Main(string[] args)
         {
             BuildOptions();
+            // MMALCameraConfig.Resolution = new Resolution(640, 480); // Set to 640 x 480. Default is 1280 x 720.
+            // MMALCameraConfig.Framerate = new MMAL_RATIONAL_T(20, 1); // Set to 20fps. Default is 30fps.
+            // MMALCameraConfig.ShutterSpeed = 2000000; // Set to 2s exposure time. Default is 0 (auto).
+            // MMALCameraConfig.ISO = 400; // Set ISO to 400. Default is 0 (auto).
+            // Singleton initialized lazily. Reference once in your application.
+            _cam = MMALCamera.Instance;
+            
+
             Console.WriteLine("Hello World");
 
             Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor, 4: Take Picture, 5: Take Video]?");
@@ -76,6 +87,10 @@ namespace IotDeviceSimulator
                     UseConnectionStringDeviceClient();
                     break;
             }
+
+            // Cleanup disposes all unmanaged resources and unloads Broadcom library. To be called when no more processing is to be done
+            // on the camera.
+            _cam.Cleanup();
 
             Console.WriteLine("Program completed, press enter to end at any time");
             Console.ReadLine();
@@ -425,36 +440,69 @@ namespace IotDeviceSimulator
 
         private static async Task TakePicture()
         {
-            // Singleton initialized lazily. Reference once in your application.
-            MMALCamera cam = MMALCamera.Instance;
-
             using (var imgCaptureHandler = new ImageStreamCaptureHandler("/home/pi/images/", "jpg"))
             {
-                await cam.TakePicture(imgCaptureHandler, MMALEncoding.JPEG, MMALEncoding.I420);
+                await _cam.TakePicture(imgCaptureHandler, MMALEncoding.JPEG, MMALEncoding.I420);
             }
-
-            // Cleanup disposes all unmanaged resources and unloads Broadcom library. To be called when no more processing is to be done
-            // on the camera.
-            cam.Cleanup();
         }
 
         private static async Task TakeVideo()
         {
-            // Singleton initialized lazily. Reference once in your application.
-            MMALCamera cam = MMALCamera.Instance;
-
-            using (var vidCaptureHandler = new VideoStreamCaptureHandler("/home/pi/videos/", "avi"))
+            using (var vidCaptureHandler = new VideoStreamCaptureHandler("/home/pi/Videos/", "h264"))
+            using (var vidEncoder = new MMALVideoEncoder())
+            using (var renderer = new MMALVideoRenderer())
             {
-                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                _cam.ConfigureCameraSettings();
 
-                await cam.TakeVideo(vidCaptureHandler, cts.Token);
+                var portConfig = new MMALPortConfig(MMALEncoding.H264, MMALEncoding.I420, quality: 10, bitrate: MMALVideoEncoder.MaxBitrateLevel4, timeout: DateTime.Now.AddMinutes(1), null, false);
+
+                // Create our component pipeline. Here we are using the H.264 standard with a YUV420 pixel format. The video will be taken at 25Mb/s.
+                vidEncoder.ConfigureOutputPort(portConfig, vidCaptureHandler);
+
+                _cam.Camera.VideoPort.ConnectTo(vidEncoder);
+                _cam.Camera.PreviewPort.ConnectTo(renderer);
+                                                    
+                // Camera warm up time
+                await Task.Delay(2000);
+                
+                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+
+                // Take video for 3 minutes.
+                await _cam.ProcessAsync(_cam.Camera.VideoPort, cts.Token);
             }
+            // using (var h264CaptureHandler = new VideoStreamCaptureHandler("/home/pi/videos/", "h264"))
+            // using (var mjpgCaptureHandler = new VideoStreamCaptureHandler("/home/pi/Videos/", "mjpeg"))
+            // using (var vidEncoder = new MMALVideoEncoder())
+            // using (var renderer = new MMALVideoRenderer())
+            // {
+            //     _cam.ConfigureCameraSettings();   
+            //     MMALCameraConfig.InlineHeaders = true;
 
-            // Cleanup disposes all unmanaged resources and unloads Broadcom library. To be called when no more processing is to be done
-            // on the camera.
-            cam.Cleanup();
+            //     // Camera warm up time
+            //     await Task.Delay(2000);                   
+                
+            //     var portConfigH264 = new MMALPortConfig(MMALEncoding.H264, MMALEncoding.I420, quality: 10, bitrate: MMALVideoEncoder.MaxBitrateLevel4, timeout: DateTime.Now.AddMinutes(1), null, false);
+            //     //var portConfigMJPEG = new MMALPortConfig(MMALEncoding.MJPEG, MMALEncoding.I420, quality: 90, bitrate: MMALVideoEncoder.MaxBitrateMJPEG, timeout: DateTime.Now.AddMinutes(1), null, false);
+
+            //     // Create our component pipeline. Here we are using H.264 encoding with a YUV420 pixel format. The video will be taken at 25Mb/s.
+            //     vidEncoder.ConfigureOutputPort(portConfigH264, h264CaptureHandler);
+
+            //     _cam.Camera.VideoPort.ConnectTo(vidEncoder);
+            //     _cam.Camera.PreviewPort.ConnectTo(renderer);
+                        
+            //     var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                    
+            //     // Take video for 3 minutes.
+            //     await _cam.ProcessAsync(_cam.Camera.VideoPort, cts.Token);
+                
+            //     // // Here we change the encoding type of the video encoder to MJPEG.
+            //     // vidEncoder.ConfigureOutputPort(portConfigMJPEG, mjpgCaptureHandler);
+                
+            //     // cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                
+            //     // // Take video for 3 minutes.
+            //     // await _cam.ProcessAsync(_cam.Camera.VideoPort, cts.Token);        
+            // }
         }
-
-
     }
 }
