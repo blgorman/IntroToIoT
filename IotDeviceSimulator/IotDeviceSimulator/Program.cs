@@ -12,6 +12,11 @@ using System.Threading;
 using Iot.Device.Bmxx80;
 using Iot.Device.Bmxx80.PowerMode;
 using System.Diagnostics;
+using MMALSharp.Common.Utility;
+using Microsoft.Extensions.Logging;
+using MMALSharp;
+using MMALSharp.Handlers;
+using MMALSharp.Common;
 
 namespace IotDeviceSimulator
 {
@@ -39,11 +44,11 @@ namespace IotDeviceSimulator
             BuildOptions();
             Console.WriteLine("Hello World");
 
-            Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor]?");
+            Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor, 4: Take Picture, 5: Take Video]?");
 
             int userChoice;
             var success = int.TryParse(Console.ReadLine(), out userChoice);
-            while (!success || userChoice < 1 || userChoice > 3)
+            while (!success || userChoice < 1 || userChoice > 5)
             {
                 Console.WriteLine("Bad input");
                 Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor]?");
@@ -58,8 +63,14 @@ namespace IotDeviceSimulator
                 case 2:
                     await UseCertificateDeviceClient();
                     break;
-		case 3:
+		        case 3:
                     await UseEnviroBoardOnPi();
+                    break;
+                case 4:
+                    await TakePicture();
+                    break;
+                case 5:
+                    await TakeVideo();
                     break;
                 default:
                     UseConnectionStringDeviceClient();
@@ -411,5 +422,39 @@ namespace IotDeviceSimulator
             await _deviceClient.SendEventAsync(loggingMessage);
             ConsoleHelper.WriteGreenMessage("Log data sent\n");
         }
+
+        private static async Task TakePicture()
+        {
+            // Singleton initialized lazily. Reference once in your application.
+            MMALCamera cam = MMALCamera.Instance;
+
+            using (var imgCaptureHandler = new ImageStreamCaptureHandler("/home/pi/images/", "jpg"))
+            {
+                await cam.TakePicture(imgCaptureHandler, MMALEncoding.JPEG, MMALEncoding.I420);
+            }
+
+            // Cleanup disposes all unmanaged resources and unloads Broadcom library. To be called when no more processing is to be done
+            // on the camera.
+            cam.Cleanup();
+        }
+
+        private static async Task TakeVideo()
+        {
+            // Singleton initialized lazily. Reference once in your application.
+            MMALCamera cam = MMALCamera.Instance;
+
+            using (var vidCaptureHandler = new VideoStreamCaptureHandler("/home/pi/videos/", "avi"))
+            {
+                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+                await cam.TakeVideo(vidCaptureHandler, cts.Token);
+            }
+
+            // Cleanup disposes all unmanaged resources and unloads Broadcom library. To be called when no more processing is to be done
+            // on the camera.
+            cam.Cleanup();
+        }
+
+
     }
 }
