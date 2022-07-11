@@ -9,11 +9,23 @@
 
   <ItemGroup>
     <None Remove="appsettings.json" />
+    <None Remove="Certificates\vibration-sensor-2500-device.cert.pfx" />
+    <None Remove="Certificates\vibration-sensor-2600-device.cert.pfx" />
+    <None Remove="Certificates\vibration-sensor-2700-device.cert.pfx" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Certificates\vibration-sensor-2500-device.cert.pfx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Certificates\vibration-sensor-2600-device.cert.pfx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Certificates\vibration-sensor-2700-device.cert.pfx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
 

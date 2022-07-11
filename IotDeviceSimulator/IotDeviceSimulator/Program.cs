@@ -58,7 +58,7 @@ namespace IotDeviceSimulator
                 case 2:
                     await UseCertificateDeviceClient();
                     break;
-		case 3:
+		        case 3:
                     await UseEnviroBoardOnPi();
                     break;
                 default:
