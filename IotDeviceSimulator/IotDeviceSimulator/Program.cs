@@ -38,6 +38,7 @@ namespace IotDeviceSimulator
         private static int _telemetryDelay = 1;
         private static int _telemetryReadForSeconds = 30;
         private static MMALCamera _cam;
+        private static int _minutesPerLoop = 1;
 
         //NOTE: This is always the endpoint for devices in Azure IoT with DPS provisioning
         private const string GlobalDeviceEndpoint = "global.azure-devices-provisioning.net";
@@ -55,14 +56,14 @@ namespace IotDeviceSimulator
 
             Console.WriteLine("Hello World");
 
-            Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor, 4: Take Picture, 5: Take Video]?");
+            Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor, 4: Take Picture, 5: Take Video, 6: Take Many videos]?");
 
             int userChoice;
             var success = int.TryParse(Console.ReadLine(), out userChoice);
-            while (!success || userChoice < 1 || userChoice > 5)
+            while (!success || userChoice < 1 || userChoice > 6)
             {
                 Console.WriteLine("Bad input");
-                Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor]?");
+                Console.WriteLine("How would you like to connect [1: Con Str, 2: Certificates, 3: Enviro Sensor, 4: Take Picture, 5: Take Video, 6: Take Many videos]?");
                 success = int.TryParse(Console.ReadLine(), out userChoice);
             }
 
@@ -83,6 +84,9 @@ namespace IotDeviceSimulator
                 case 5:
                     await TakeVideo();
                     break;
+                case 6:
+                    await TakeManyVideos();
+                    break;
                 default:
                     UseConnectionStringDeviceClient();
                     break;
@@ -99,8 +103,8 @@ namespace IotDeviceSimulator
         private static void UseConnectionStringDeviceClient()
         {
             Console.WriteLine("Using Connection string to write telemetry to the hub");
-            _deviceConnectionString = _configuration["Device:ConnectionString"];
-
+            _deviceConnectionString = _configuration["Device:Simulatron2000"];
+            Console.WriteLine(_deviceConnectionString);
             //https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-devguide-protocols
             //MQTT for single devices, AMQP for connection multiplexing
             //HTTPS for non web-socket connections
@@ -117,8 +121,8 @@ namespace IotDeviceSimulator
             Console.WriteLine("Would you like to show each telemetry reading [y/n]?");
             var shouldShowIndivudualTelemetry = Console.ReadLine()?.StartsWith("y", StringComparison.OrdinalIgnoreCase) ?? false;
         
-            _deviceConnectionString = _configuration["Device:ConnectionString"];
-
+            _deviceConnectionString = _configuration["Device:Enviro1000"];
+            Console.WriteLine(_deviceConnectionString);
             _deviceClient = DeviceClient.CreateFromConnectionString(
                     _deviceConnectionString,
                     TransportType.Mqtt);
@@ -503,6 +507,40 @@ namespace IotDeviceSimulator
             //     // // Take video for 3 minutes.
             //     // await _cam.ProcessAsync(_cam.Camera.VideoPort, cts.Token);        
             // }
+        }
+
+        private static async Task TakeManyVideos()
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                using (var vidCaptureHandler = new VideoStreamCaptureHandler("/home/pi/Videos/", "h264"))
+                {
+                    using (var vidEncoder = new MMALVideoEncoder())
+                    {
+                        using (var renderer = new MMALVideoRenderer())
+                        {
+                            _cam.ConfigureCameraSettings();
+
+                            var portConfig = new MMALPortConfig(MMALEncoding.H264, MMALEncoding.I420, quality: 10, bitrate: MMALVideoEncoder.MaxBitrateLevel4, timeout: DateTime.Now.AddMinutes(1), null, false);
+
+                            // Create our component pipeline. Here we are using the H.264 standard with a YUV420 pixel format. The video will be taken at 25Mb/s.
+                            vidEncoder.ConfigureOutputPort(portConfig, vidCaptureHandler);
+
+                            _cam.Camera.VideoPort.ConnectTo(vidEncoder);
+                            _cam.Camera.PreviewPort.ConnectTo(renderer);
+
+                            
+                            // Camera warm up time
+                            await Task.Delay(2000);
+                            
+                            var cts = new CancellationTokenSource(TimeSpan.FromMinutes(_minutesPerLoop));
+
+                            // Take video for _minutesPerLoop minutes.
+                            await _cam.ProcessAsync(_cam.Camera.VideoPort, cts.Token);
+                        }
+                    }
+                }
+            }
         }
     }
 }
